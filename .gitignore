@@ -1,0 +1,4 @@
+.cache/
+.ipynb_checkpoints/
+.ipython/
+.local/
