@@ -5,4 +5,5 @@ docker run \
 	--rm \
 	--memory 8G \
 	--volume $(pwd):/notebooks \
-	-p 8888:8888 tf-jupyter
+	--volume $(pwd)/logs/:/logs \
+	-p 8888:8888 -p 6006:6006 tf-jupyter 
