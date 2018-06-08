@@ -1,7 +1,8 @@
 FROM tensorflow/tensorflow:nightly-py3
 
 RUN apt-get -y update \
-    && pip3 install --upgrade tfp-nightly jupyter
+    && pip3 install --upgrade tfp-nightly jupyter pandas_plink
+
 
 
 CMD tensorboard --logdir /logs --port 6006 & \
