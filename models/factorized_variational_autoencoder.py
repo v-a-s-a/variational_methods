@@ -125,6 +125,8 @@ def make_conv_encoder(data, sample_size, site_num, latent_dim):
 
 
 def make_conv_decoder(u , v, sample_size, site_num, latent_dim):
+    
+    ## convolutional decoder
     z = tf.concat([u, v], 0)
     print(z.shape)
     x = tf.reshape(z, [sample_size + site_num, 1, latent_dim, 1])
@@ -136,20 +138,26 @@ def make_conv_decoder(u , v, sample_size, site_num, latent_dim):
     print(x.shape)
 
     x = tf.expand_dims(x, axis=1)
-    x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=(1, 3),
-        strides=(1, 3), padding='SAME', activation=tf.nn.sigmoid)
+    x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=(1, 4),
+        strides=(1, 4), padding='SAME', activation=tf.nn.sigmoid)
     x = tf.squeeze(x, [1])
     print(x.shape)
 
     x = tf.expand_dims(x, axis=1)
     x = tf.layers.conv2d_transpose(x, filters=1, kernel_size=(1, 3),
-        strides=(1, 3), padding='SAME', activation=tf.nn.sigmoid)
+        strides=(1, 3), padding='VALID', activation=tf.nn.sigmoid)
     x = tf.squeeze(x, [1])
     x = tf.pad(x, padding)
     print(x.shape)
 
-    decoder_net = tf.layers.dense(inputs=x,
-        units=sample_size * site_num, activation=None)   
+    decoder_net = x
+
+    # decoder_net = tf.layers.dense(inputs=x,
+    #     units=sample_size * site_num, activation=None)
+
+    # ## dot product decoder
+    # z = tf.tensordot(u, v, axes=[[1], [1]])
+    # decoder_net = tf.reshape(z, [1, site_num*sample_size])
 
     return tfd.Independent(tfd.Binomial(logits=decoder_net,
                             total_count=2.0),
@@ -200,7 +208,7 @@ def main(argv):
         X = X.astype(np.float32)
 
         dataset = tf.data.Dataset.from_tensor_slices(X)
-        dataset = dataset.batch(FLAGS.N) # one large batch
+        dataset = dataset.batch(FLAGS.N)
         iterator = dataset.make_initializable_iterator()
         data = iterator.get_next()
         
