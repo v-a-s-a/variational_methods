@@ -57,25 +57,20 @@ FLAGS = flags.FLAGS
 def make_conv_encoder(data, batch_size, num_features, latent_dimension=2):
     x = tf.reshape(data, [batch_size, num_features, 1])
     print('Encoder layer1 input: {}'.format(x.shape))
-    x = tf.layers.conv1d(x, 64, 3, strides=3, padding='SAME')
-    x = tf.nn.elu(x)
+    x = tf.layers.conv1d(x, 64, 3, strides=3, padding='SAME', activation=tf.nn.relu)
 
     print('Encoder layer2 input: {}'.format(x.shape))
-    x = tf.layers.conv1d(x, 32, 3, strides=3, padding='SAME')
-    x = tf.nn.elu(x)
+    x = tf.layers.conv1d(x, 32, 3, strides=3, padding='SAME', activation=tf.nn.relu)
 
     print('Encoder layer3 input: {}'.format(x.shape))
-    x = tf.layers.conv1d(x, 16, 3, strides=3, padding='SAME')
-    x = tf.nn.elu(x)
+    x = tf.layers.conv1d(x, 16, 3, strides=3, padding='SAME', tf.nn.relu)
 
     print('Encoder layer4 input: {}'.format(x.shape))
-    x = tf.layers.conv1d(x, 8, 3, strides=3, padding='VALID')
-    x = tf.nn.elu(x)
-    
+    x = tf.layers.conv1d(x, 8, 3, strides=3, padding='VALID', activation=tf.nn.relu)  
     x = tf.reshape(x, [batch_size, -1]) # drop channel dimension
     
     print('Encoder final layer input: {}'.format(x.shape))
-    encoder_net = tf.layers.dense(x, units=latent_dimension*2)
+    encoder_net = tf.layers.dense(x, units=latent_dimension*2, activation=tf.nn.sigmoid)
     
     loc = encoder_net[..., :latent_dimension]
     scale = tf.nn.softplus(encoder_net[..., latent_dimension:] + 0.5)
@@ -94,8 +89,7 @@ def make_conv_decoder(latent_code, batch_size, num_features, latent_dimension=2)
     print('Decoder layer1 input: {}'.format(x.shape))
     x = tf.reshape(x, [batch_size, 1, 1632, 1])
     x = tf.layers.conv2d_transpose(x, filters=16, kernel_size=(1, 3),
-        strides=(1, 3), padding='VALID')
-    x = tf.nn.elu(x)
+        strides=(1, 3), padding='VALID', tf.)
     x = tf.squeeze(x, [1])
     padding = tf.constant([[0, 0], [1, 0], [0, 0]])
     x = tf.pad(x, padding)
@@ -103,26 +97,24 @@ def make_conv_decoder(latent_code, batch_size, num_features, latent_dimension=2)
     print('Decoder layer2 input: {}'.format(x.shape))
     x = tf.expand_dims(x, axis=1)
     x = tf.layers.conv2d_transpose(x, filters=32, kernel_size=(1, 3),
-        strides=(1, 3), padding='SAME')
-    x = tf.nn.elu(x)
+        strides=(1, 3), padding='SAME', activation=tf.nn.sigmoid)
     x = tf.squeeze(x, [1])
     
     print('Decoder layer3 input: {}'.format(x.shape))
     x = tf.expand_dims(x, axis=1)
     x = tf.layers.conv2d_transpose(x, filters=64, kernel_size=(1, 3),
-        strides=(1, 3), padding='SAME')
-    x = tf.nn.elu(x)
+        strides=(1, 3), padding='SAME', activation=tf.nn.relu)
     x = tf.squeeze(x, [1])
     x = tf.pad(x, padding)
 
     print('Decoder layer4 input: {}'.format(x.shape))
     x = tf.expand_dims(x, axis=1)
     x = tf.layers.conv2d_transpose(x, filters=1, kernel_size=(1, 3),
-        strides=(1, 3), padding='SAME')
-    x = tf.nn.elu(x)
+        strides=(1, 3), padding='SAME', activation=tf.nn.sigmoid)
     x = tf.squeeze(x, [1, 3])
     
     print('Decoder final layer input: {}'.format(x.shape))
+
     decoder_net = tf.slice(x, [0, 0], [batch_size, num_features])
     
     return tfd.Independent(tfd.Binomial(logits=decoder_net,
@@ -209,7 +201,7 @@ def main(argv):
                     try:
                         _, epoch_elbo, epoch_latent_code = sess.run([optimizer, elbo, latent_code])
                         conv_sample_latent_codes.append(epoch_latent_code)
-                        print('EPOCH {epoch}: ELBO {epoch_elbo}')
+                        print(f'EPOCH {epoch}: ELBO {epoch_elbo}')
                     except tf.errors.OutOfRangeError:
                         conv_elbo_record.append(epoch_elbo)
                         break
