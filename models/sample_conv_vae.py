@@ -33,7 +33,9 @@ flags.DEFINE_integer('M',
 flags.DEFINE_integer('D',
     default=20,
     help='Latent dimension.')
-
+flags.DEFINE_integer('sim_batches',
+    default=10,
+    help='Number of batches (of batch_size specified separately) to simulate genotypes for.'
 # Training
 flags.DEFINE_integer('epochs',
     default=100,
@@ -156,35 +158,28 @@ def main(argv):
         iterator = dataset.make_initializable_iterator()
         data = iterator.get_next()
         data = tf.cast(data, tf.float32)
-
         
         # inference network; encoder
         with tf.variable_scope('encoder'):
-            encoder = make_conv_encoder(data, batch_size=FLAGS.batch_size,
+            encoder_q = make_conv_encoder(data, batch_size=FLAGS.batch_size,
                                         latent_dimension=FLAGS.D,
                                         num_features=FLAGS.M)
-        
-        latent_code = encoder.sample()
+            z = encoder_q.sample()
 
+        # generative network; decoder
+        with tf.variable_scope('decoder'):
+            decoder_p = make_conv_decoder(z, batch_size=FLAGS.batch_size,
+                                            latent_dimension=FLAGS.D, num_features=FLAGS.M)
+            simulated_geno = tf.concat(tf.map_fn(lambda x: decoder_p.sample()), 0)
+        
         # prior
         with tf.variable_scope('prior'):
-            prior = make_prior(latent_dimension=FLAGS.D)
+            prior = make_prior(latent_dimension=d)
 
         # loss
-        def joint_log_prob(z):
-            with tf.variable_scope('decoder'):
-                # generative network; decoder
-                decoder = make_conv_decoder(z, batch_size=FLAGS.batch_size,
-                                            latent_dimension=FLAGS.D, num_features=FLAGS.M)
-            return decoder.log_prob(data) + prior.log_prob(z)
-        
-        elbo = tf.reduce_sum(
-                tfp.vi.monte_carlo_csiszar_f_divergence(
-                    f=tfp.vi.kl_reverse,
-                    p_log_prob=joint_log_prob,
-                    q=encoder,
-                    num_draws=1))
-        
+        likelihood = decoder_p.log_prob(data)
+        elbo = tf.reduce_mean(tfd.kl_divergence(encoder_q, prior) - likelihood)
+
         # optimizer
         optimizer = tf.train.AdamOptimizer(0.001).minimize(elbo)
 
@@ -199,9 +194,10 @@ def main(argv):
                 conv_sample_latent_codes = list()
                 while True:
                     try:
-                        _, epoch_elbo, epoch_latent_code = sess.run([optimizer, elbo, latent_code])
+                        _, epoch_elbo, epoch_latent_code, sim_geno = sess.run([optimizer, elbo, latent_code, sim_geno])
                         conv_sample_latent_codes.append(epoch_latent_code)
                         print('EPOCH {epoch}: ELBO {epoch_elbo}'.format(epoch=epoch, epoch_elbo=epoch_elbo))
+                        np.save('sim_geno.' + epoch + '.npy', sim_geno)
                     except tf.errors.OutOfRangeError:
                         conv_elbo_record.append(epoch_elbo)
                         break
