@@ -201,7 +201,7 @@ def main(argv):
                     try:
                         _, epoch_elbo, epoch_latent_code = sess.run([optimizer, elbo, latent_code])
                         conv_sample_latent_codes.append(epoch_latent_code)
-                        print(f'EPOCH {epoch}: ELBO {epoch_elbo}')
+                        print('EPOCH {epoch}: ELBO {epoch_elbo}'.format(epoch=epoch, epoch_elbo=epoch_elbo))
                     except tf.errors.OutOfRangeError:
                         conv_elbo_record.append(epoch_elbo)
                         break
