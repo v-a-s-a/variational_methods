@@ -35,7 +35,7 @@ flags.DEFINE_integer('D',
     help='Latent dimension.')
 flags.DEFINE_integer('sim_batches',
     default=10,
-    help='Number of batches (of batch_size specified separately) to simulate genotypes for.'
+    help='Number of batches (of batch_size specified separately) to simulate genotypes for.')
 # Training
 flags.DEFINE_integer('epochs',
     default=100,
@@ -170,7 +170,7 @@ def main(argv):
         with tf.variable_scope('decoder'):
             decoder_p = make_conv_decoder(z, batch_size=FLAGS.batch_size,
                                             latent_dimension=FLAGS.D, num_features=FLAGS.M)
-            simulated_geno = tf.concat(tf.map_fn(lambda x: decoder_p.sample()), 0)
+            simulated_geno = tf.concat(tf.map_fn(lambda x: decoder_p.sample(), tf.range(FLAGS.sim_batches)), 0)
         
         # prior
         with tf.variable_scope('prior'):
