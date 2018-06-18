@@ -118,11 +118,11 @@ def make_conv_decoder(latent_code, batch_size, num_features, latent_dimension=2)
     print('Decoder final layer input: {}'.format(x.shape))
 
     decoder_net = tf.slice(x, [0, 0], [batch_size, num_features])
+
+    p_x_given_z = tfd.Binomial(logits=decoder_net,
+                                total_count=2.0)
     
-    return tfd.Independent(tfd.Binomial(logits=decoder_net,
-                            total_count=2.0),
-                            reinterpreted_batch_ndims=1,
-                            name="decoder_distribution")
+    return p_x_given_z
 
 
 def make_prior(latent_dimension):
@@ -154,7 +154,7 @@ def main(argv):
         # input pipeline
         dataset = tf.data.TFRecordDataset(FLAGS.plink_tfrecords, compression_type=tf.constant('ZLIB'))
         dataset = dataset.map(lambda fn: decode_tfrecords(fn, FLAGS.M))
-        dataset = dataset.batch(FLAGS.batch_size)
+        dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(flags.batch_size))
         iterator = dataset.make_initializable_iterator()
         data = iterator.get_next()
         data = tf.cast(data, tf.float32)
@@ -162,22 +162,25 @@ def main(argv):
         # inference network; encoder
         with tf.variable_scope('encoder'):
             encoder_q = make_conv_encoder(data, batch_size=FLAGS.batch_size,
-                                        latent_dimension=FLAGS.D,
-                                        num_features=FLAGS.M)
+                                            latent_dimension=FLAGS.D,
+                                            num_features=FLAGS.M)
             z = encoder_q.sample()
 
         # generative network; decoder
         with tf.variable_scope('decoder'):
-            decoder_p = make_conv_decoder(z, batch_size=FLAGS.batch_size,
+            decoder_template = tf.make_template('decoder', make_conv_decoder)
+            decoder_p = decoder_template(z, batch_size=FLAGS.batch_size,
                                             latent_dimension=FLAGS.D, num_features=FLAGS.M)
-            simulated_geno = tf.concat(tf.map_fn(lambda x: decoder_p.sample(), tf.range(FLAGS.sim_batches)), 0)
+            indep_p = tfd.Independent(decoder_p, reinterpreted_batch_ndims=1, name='decoder_distribution')
+            pi = decoder_template(z, batch_size=FLAGS.batch_size,
+                                    latent_dimension=FLAGS.D, num_features=FLAGS.M).probs
         
         # prior
         with tf.variable_scope('prior'):
-            prior = make_prior(latent_dimension=d)
+            prior = make_prior(latent_dimension=FLAGS.D)
 
         # loss
-        likelihood = decoder_p.log_prob(data)
+        likelihood = indep_p.log_prob(data)
         elbo = tf.reduce_mean(tfd.kl_divergence(encoder_q, prior) - likelihood)
 
         # optimizer
@@ -191,15 +194,20 @@ def main(argv):
             for epoch in range(FLAGS.epochs):
                 sess.run(iterator.initializer)
                 
-                conv_sample_latent_codes = list()
+                conv_sample_zs = list()
+                conv_pi = list()
                 while True:
                     try:
-                        _, epoch_elbo, epoch_latent_code, sim_geno = sess.run([optimizer, elbo, latent_code, sim_geno])
-                        conv_sample_latent_codes.append(epoch_latent_code)
+                        _, epoch_elbo, epoch_z, epoch_pi = sess.run([optimizer, elbo, z, pi])
+                        conv_sample_zs.append(epoch_z)
+                        conv_pi.append(epoch_pi)
                         print('EPOCH {epoch}: ELBO {epoch_elbo}'.format(epoch=epoch, epoch_elbo=epoch_elbo))
-                        np.save('sim_geno.' + epoch + '.npy', sim_geno)
                     except tf.errors.OutOfRangeError:
                         conv_elbo_record.append(epoch_elbo)
+                        sample_pi = np.concatenate(conv_pi, 0)
+                        sample_z = np.concatenate(conv_sample_zs, 0)
+                        np.save('sample{}_{}feature_pass{}_z.npy'.format(FLAGS.N, FLAGS.M, epoch), sample_z)
+                        np.save('sample{}_{}feature_pass{}_pi.npy'.format(FLAGS.N, FLAGS.M, epoch), sample_pi)
                         break
 
 
